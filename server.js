@@ -6,22 +6,24 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
-app.use(express.json());
 app.use(express.static("public"));
 
-app.get("/", (req, res) => {
-  res.sendFile(__dirname + "/public/index.html");
-});
-
-const users = {};
+const users = {}; // 電話番号 → ws
 
 wss.on("connection", ws => {
+
   ws.on("message", msg => {
-    const data = JSON.parse(msg);
+    let data;
+    try {
+      data = JSON.parse(msg);
+    } catch {
+      return;
+    }
 
     if (data.type === "register") {
       ws.number = data.number;
       users[data.number] = ws;
+      return;
     }
 
     if (data.type === "call") {
@@ -32,11 +34,14 @@ wss.on("connection", ws => {
           from: ws.number
         }));
       }
+      return;
     }
 
     if (data.type === "signal") {
       const target = users[data.to];
-      if (target) target.send(JSON.stringify(data));
+      if (target) {
+        target.send(JSON.stringify(data));
+      }
     }
   });
 
