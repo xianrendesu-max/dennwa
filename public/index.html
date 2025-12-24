@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>WiFi電話</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+body { font-family:sans-serif; background:#000; color:#fff; text-align:center; }
+.screen { padding:20px; }
+input { font-size:22px; width:80%; text-align:center; }
+button {
+  font-size:20px;
+  padding:15px;
+  margin:10px;
+  border-radius:50%;
+  width:80px;
+}
+.green { background:#0f0; }
+.red { background:#f00; }
+</style>
+</head>
+<body>
+
+<div class="screen">
+  <h3>あなたの番号</h3>
+  <div id="myNumber"></div>
+
+  <input id="callTo" placeholder="番号を入力">
+  <br>
+  <button class="green" onclick="call()">📞</button>
+</div>
+
+<div id="incoming" style="display:none">
+  <h2 id="from"></h2>
+  <button class="green" onclick="answer()">応答</button>
+  <button class="red" onclick="reject()">拒否</button>
+</div>
+
+<audio id="remote" autoplay></audio>
+
+<script>
+const ws = new WebSocket(location.origin.replace("http","ws"));
+const pc = new RTCPeerConnection();
+const audio = document.getElementById("remote");
+
+let myNumber = localStorage.getItem("myNumber");
+if (!myNumber) {
+  myNumber = "7" + Math.floor(1000000 + Math.random() * 9000000);
+  localStorage.setItem("myNumber", myNumber);
+}
+document.getElementById("myNumber").innerText = myNumber;
+
+ws.onopen = () => {
+  ws.send(JSON.stringify({ type:"register", number:myNumber }));
+};
+
+pc.ontrack = e => audio.srcObject = e.streams[0];
+pc.onicecandidate = e => {
+  if (e.candidate)
+    ws.send(JSON.stringify({ type:"signal", ice:e.candidate, to:target }));
+};
+
+let target = null;
+
+ws.onmessage = async e => {
+  const d = JSON.parse(e.data);
+
+  if (d.type === "incoming") {
+    target = d.from;
+    document.getElementById("incoming").style.display="block";
+    document.getElementById("from").innerText = d.from + " から着信";
+  }
+
+  if (d.offer) {
+    await pc.setRemoteDescription(d.offer);
+    const ans = await pc.createAnswer();
+    await pc.setLocalDescription(ans);
+    ws.send(JSON.stringify({ type:"signal", answer:ans, to:target }));
+  }
+
+  if (d.answer) await pc.setRemoteDescription(d.answer);
+  if (d.ice) await pc.addIceCandidate(d.ice);
+};
+
+async function call() {
+  target = document.getElementById("callTo").value;
+  ws.send(JSON.stringify({ type:"call", to:target }));
+
+  const stream = await navigator.mediaDevices.getUserMedia({ audio:true });
+  stream.getTracks().forEach(t => pc.addTrack(t, stream));
+
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+  ws.send(JSON.stringify({ type:"signal", offer, to:target }));
+}
+
+function answer() {
+  document.getElementById("incoming").style.display="none";
+}
+
+function reject() {
+  document.getElementById("incoming").style.display="none";
+}
+</script>
+</body>
+</html>
