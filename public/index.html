@@ -2,47 +2,112 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>WiFi電話</title>
+<title>仙人電話</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
-body { font-family:sans-serif; background:#000; color:#fff; text-align:center; }
-.screen { padding:20px; }
-input { font-size:22px; width:80%; text-align:center; }
-button {
-  font-size:20px;
-  padding:15px;
-  margin:10px;
-  border-radius:50%;
-  width:80px;
+body {
+  margin:0;
+  font-family: system-ui, sans-serif;
+  background:#000;
+  color:#fff;
 }
-.green { background:#0f0; }
-.red { background:#f00; }
+header {
+  padding:15px;
+  text-align:center;
+  font-size:18px;
+  background:#111;
+}
+.screen {
+  padding:20px;
+  text-align:center;
+}
+.number {
+  font-size:24px;
+  margin:10px 0;
+}
+input {
+  font-size:22px;
+  width:80%;
+  padding:10px;
+  text-align:center;
+  border-radius:10px;
+  border:none;
+}
+.buttons {
+  margin-top:20px;
+}
+.btn {
+  width:80px;
+  height:80px;
+  border-radius:50%;
+  font-size:22px;
+  border:none;
+  margin:10px;
+}
+.call { background:#00c853; }
+.end { background:#d50000; }
+.hidden { display:none; }
+
+#timer {
+  font-size:20px;
+  margin-top:10px;
+}
+
+.history {
+  text-align:left;
+  margin-top:20px;
+}
+.history li {
+  padding:8px;
+  border-bottom:1px solid #333;
+  font-size:14px;
+}
 </style>
 </head>
 <body>
 
-<div class="screen">
-  <h3>あなたの番号</h3>
-  <div id="myNumber"></div>
+<header>仙人電話</header>
 
-  <input id="callTo" placeholder="番号を入力">
-  <br>
-  <button class="green" onclick="call()">📞</button>
+<div class="screen" id="main">
+  <div>あなたの番号</div>
+  <div class="number" id="myNumber"></div>
+
+  <input id="callTo" placeholder="相手の番号">
+  <div class="buttons">
+    <button class="btn call" onclick="call()">📞</button>
+  </div>
+
+  <div class="history">
+    <h3>通話履歴</h3>
+    <ul id="history"></ul>
+  </div>
 </div>
 
-<div id="incoming" style="display:none">
-  <h2 id="from"></h2>
-  <button class="green" onclick="answer()">応答</button>
-  <button class="red" onclick="reject()">拒否</button>
+<div class="screen hidden" id="calling">
+  <h2 id="callText"></h2>
+  <div id="timer">00:00</div>
+  <div class="buttons">
+    <button class="btn end" onclick="hangup()">❌</button>
+  </div>
 </div>
 
 <audio id="remote" autoplay></audio>
+<audio id="ring" loop src="ring.mp3"></audio>
 
 <script>
-const ws = new WebSocket(location.origin.replace("http","ws"));
+/* ===== 基本設定 ===== */
+const ws = new WebSocket(
+  (location.protocol === "https:" ? "wss://" : "ws://") + location.host
+);
 const pc = new RTCPeerConnection();
-const audio = document.getElementById("remote");
+const remote = document.getElementById("remote");
+const ring = document.getElementById("ring");
 
+let target = null;
+let timerId = null;
+let sec = 0;
+
+/* ===== 固有番号 ===== */
 let myNumber = localStorage.getItem("myNumber");
 if (!myNumber) {
   myNumber = "7" + Math.floor(1000000 + Math.random() * 9000000);
@@ -50,25 +115,19 @@ if (!myNumber) {
 }
 document.getElementById("myNumber").innerText = myNumber;
 
+/* ===== WebSocket ===== */
 ws.onopen = () => {
   ws.send(JSON.stringify({ type:"register", number:myNumber }));
 };
-
-pc.ontrack = e => audio.srcObject = e.streams[0];
-pc.onicecandidate = e => {
-  if (e.candidate)
-    ws.send(JSON.stringify({ type:"signal", ice:e.candidate, to:target }));
-};
-
-let target = null;
 
 ws.onmessage = async e => {
   const d = JSON.parse(e.data);
 
   if (d.type === "incoming") {
     target = d.from;
-    document.getElementById("incoming").style.display="block";
-    document.getElementById("from").innerText = d.from + " から着信";
+    ring.play();
+    showCalling(`${d.from} から着信`);
+    saveHistory("着信", d.from);
   }
 
   if (d.offer) {
@@ -76,14 +135,30 @@ ws.onmessage = async e => {
     const ans = await pc.createAnswer();
     await pc.setLocalDescription(ans);
     ws.send(JSON.stringify({ type:"signal", answer:ans, to:target }));
+    startTimer();
   }
 
-  if (d.answer) await pc.setRemoteDescription(d.answer);
+  if (d.answer) {
+    await pc.setRemoteDescription(d.answer);
+    startTimer();
+  }
+
   if (d.ice) await pc.addIceCandidate(d.ice);
 };
 
+/* ===== WebRTC ===== */
+pc.ontrack = e => remote.srcObject = e.streams[0];
+pc.onicecandidate = e => {
+  if (e.candidate)
+    ws.send(JSON.stringify({ type:"signal", ice:e.candidate, to:target }));
+};
+
+/* ===== 発信 ===== */
 async function call() {
-  target = document.getElementById("callTo").value;
+  target = callTo.value;
+  showCalling(`${target} に発信中`);
+  saveHistory("発信", target);
+
   ws.send(JSON.stringify({ type:"call", to:target }));
 
   const stream = await navigator.mediaDevices.getUserMedia({ audio:true });
@@ -94,13 +169,52 @@ async function call() {
   ws.send(JSON.stringify({ type:"signal", offer, to:target }));
 }
 
-function answer() {
-  document.getElementById("incoming").style.display="none";
+/* ===== 切断 ===== */
+function hangup() {
+  stopTimer();
+  pc.close();
+  location.reload(); // 簡易リセット
 }
 
-function reject() {
-  document.getElementById("incoming").style.display="none";
+/* ===== UI制御 ===== */
+function showCalling(text) {
+  document.getElementById("main").classList.add("hidden");
+  document.getElementById("calling").classList.remove("hidden");
+  document.getElementById("callText").innerText = text;
 }
+
+/* ===== タイマー ===== */
+function startTimer() {
+  ring.pause();
+  timerId = setInterval(() => {
+    sec++;
+    const m = String(Math.floor(sec / 60)).padStart(2,"0");
+    const s = String(sec % 60).padStart(2,"0");
+    timer.innerText = `${m}:${s}`;
+  }, 1000);
+}
+
+function stopTimer() {
+  clearInterval(timerId);
+  sec = 0;
+}
+
+/* ===== 履歴 ===== */
+function saveHistory(type, num) {
+  const h = JSON.parse(localStorage.getItem("history") || "[]");
+  h.unshift({ type, num, time:new Date().toLocaleString() });
+  localStorage.setItem("history", JSON.stringify(h));
+  loadHistory();
+}
+
+function loadHistory() {
+  const h = JSON.parse(localStorage.getItem("history") || "[]");
+  history.innerHTML = h.map(i =>
+    `<li>${i.time}｜${i.type}｜${i.num}</li>`
+  ).join("");
+}
+loadHistory();
 </script>
+
 </body>
 </html>
