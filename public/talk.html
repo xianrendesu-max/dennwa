@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>通話中</title>
+<style>
+body{text-align:center;font-family:system-ui}
+#t{font-size:32px;margin-top:40px}
+button{margin-top:50px;width:100px;height:100px;border-radius:50%;font-size:26px;background:#f44336;color:#fff;border:none}
+</style>
+</head><body>
+
+<h2 id="with"></h2>
+<div id="t">00:00</div>
+<button onclick="end()">❌</button>
+<audio id="remote" autoplay></audio>
+
+<script src="common.js"></script>
+<script>
+with.innerText = localStorage.getItem("peer")+" と通話中";
+pc.ontrack = e => remote.srcObject = e.streams[0];
+
+let s=0;
+setInterval(()=>{t.innerText=
+String(Math.floor(++s/60)).padStart(2,"0")+":"+
+String(s%60).padStart(2,"0")},1000);
+
+function end(){
+  const h=JSON.parse(localStorage.getItem("history")||"[]");
+  h.unshift({time:new Date().toLocaleString(),num:with.innerText});
+  localStorage.setItem("history",JSON.stringify(h));
+  location.href="hassin.html";
+}
+</script>
+</body></html>
