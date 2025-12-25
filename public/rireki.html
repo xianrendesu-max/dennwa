@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>履歴</title>
+<style>
+body{font-family:system-ui;background:#fafafa}
+.card{background:#fff;margin:15px;padding:15px;border-radius:15px}
+</style>
+</head><body>
+
+<h2 style="text-align:center">通話履歴</h2>
+<div id="l"></div>
+<a href="hassin.html">戻る</a>
+
+<script>
+const h=JSON.parse(localStorage.getItem("history")||"[]");
+l.innerHTML=h.map(i=>`<div class="card">${i.time}<br>${i.num}</div>`).join("");
+</script>
+</body></html>
