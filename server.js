@@ -8,40 +8,25 @@ const wss = new WebSocket.Server({ server });
 
 app.use(express.static("public"));
 
-const users = {}; // 電話番号 → ws
+const users = {}; // number -> ws
 
 wss.on("connection", ws => {
-
   ws.on("message", msg => {
-    let data;
-    try {
-      data = JSON.parse(msg);
-    } catch {
-      return;
+    const d = JSON.parse(msg);
+
+    if (d.type === "register") {
+      ws.number = d.number;
+      users[d.number] = ws;
     }
 
-    if (data.type === "register") {
-      ws.number = data.number;
-      users[data.number] = ws;
-      return;
+    if (d.type === "call") {
+      const t = users[d.to];
+      if (t) t.send(JSON.stringify({ type:"incoming", from: ws.number }));
     }
 
-    if (data.type === "call") {
-      const target = users[data.to];
-      if (target) {
-        target.send(JSON.stringify({
-          type: "incoming",
-          from: ws.number
-        }));
-      }
-      return;
-    }
-
-    if (data.type === "signal") {
-      const target = users[data.to];
-      if (target) {
-        target.send(JSON.stringify(data));
-      }
+    if (d.type === "signal") {
+      const t = users[d.to];
+      if (t) t.send(JSON.stringify(d));
     }
   });
 
@@ -50,7 +35,4 @@ wss.on("connection", ws => {
   });
 });
 
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-  console.log("Server running on port " + PORT);
-});
+server.listen(process.env.PORT || 3000);
