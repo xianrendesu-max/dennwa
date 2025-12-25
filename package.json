@@ -1,7 +1,6 @@
 {
-  "name": "wifi-phone-app",
+  "name": "wifi-phone-final",
   "version": "1.0.0",
-  "description": "WebRTC WiFi Phone App",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
