@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>着信</title>
+<style>
+body{font-family:system-ui;background:#e3f2fd;text-align:center}
+button{width:90px;height:90px;border-radius:50%;font-size:26px;border:none;margin:20px}
+.ok{background:#4caf50;color:#fff}
+.ng{background:#f44336;color:#fff}
+</style>
+</head><body>
+
+<h2 id="from"></h2>
+<button class="ok" onclick="ans()">📞</button>
+<button class="ng" onclick="rej()">❌</button>
+<audio src="ring.mp3" autoplay loop></audio>
+
+<script src="common.js"></script>
+<script>
+from.innerText = localStorage.getItem("peer")+" から着信";
+function ans(){ location.href="talk.html"; }
+function rej(){ location.href="hassin.html"; }
+</script>
+</body></html>
